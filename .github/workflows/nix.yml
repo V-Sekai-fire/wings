@@ -1,0 +1,69 @@
+# SPDX-FileCopyrightText: 2026 K. S. Ernest (iFire) Lee
+#
+# SPDX-License-Identifier: MIT
+name: nix
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  group: nix-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+  packages: write
+jobs:
+  build:
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: ubuntu-latest
+          - system: aarch64-linux
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: nix-community/cache-nix-action@v6
+        with:
+          primary-key: nix-${{ matrix.system }}-${{ hashFiles('flake.lock') }}
+          restore-prefixes-first-match: nix-${{ matrix.system }}-
+      - run: nix build .#packages.${{ matrix.system }}.oras-files -L
+      - name: Push with ORAS
+        if: github.ref == 'refs/heads/master'
+        run: |
+          nix shell nixpkgs#oras -c oras login ghcr.io -u "${{ github.actor }}" -p "${{ secrets.GITHUB_TOKEN }}"
+          nix run .#apps.${{ matrix.system }}.push -- "ghcr.io/v-sekai-fire/wings:${GITHUB_SHA::12}"
+  macos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, x86_64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: nix-community/cache-nix-action@v6
+        with:
+          primary-key: nix-macos-${{ matrix.arch }}-${{ hashFiles('flake.lock') }}
+          restore-prefixes-first-match: nix-macos-${{ matrix.arch }}-
+      # The SDK is private and not redistributable. It is the private package ghcr.io/v-sekai-fire/apple-sdks; the
+      # package's settings must give this repository Actions read access.
+      - name: Fetch the SDK
+        id: sdk
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: nix shell nixpkgs#oras -c bash -c 'echo "override=$(tools/fetch-apple-sdk.sh "$RUNNER_TEMP/sdk" | tail -1)" >> "$GITHUB_OUTPUT"' 
+      - run: nix build .#packages.x86_64-linux.macos-${{ matrix.arch }}-nifs ${{ steps.sdk.outputs.override }} -L -o result
+      - name: Push with ORAS
+        if: github.ref == 'refs/heads/master'
+        run: |
+          tar --sort=name --mtime=@1 --owner=0 --group=0 -C result -cf - priv | nix shell nixpkgs#zstd -c zstd -19 -o wings-nifs-macos-${{ matrix.arch }}.tar.zst
+          nix shell nixpkgs#oras -c oras login ghcr.io -u "${{ github.actor }}" -p "${{ secrets.GITHUB_TOKEN }}"
+          nix shell nixpkgs#oras -c oras push "ghcr.io/v-sekai-fire/wings:${GITHUB_SHA::12}-macos-${{ matrix.arch }}" --artifact-type application/vnd.v-sekai-fire.wings.v1 wings-nifs-macos-${{ matrix.arch }}.tar.zst:application/zstd

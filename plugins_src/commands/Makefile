@@ -34,6 +34,7 @@ MODULES= \
 	wpc_ambocc \
 	wpc_arc_intersect \
 	wpc_bend \
+	wpc_cagefit \
 	wpc_circularise \
 	wpc_connect_tool \
 	wpc_constraints \
