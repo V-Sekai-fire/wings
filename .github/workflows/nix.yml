@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: 2026 K. S. Ernest (iFire) Lee
+#
+# SPDX-License-Identifier: MIT
+name: nix
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  group: nix-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+  packages: write
+jobs:
+  build:
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: ubuntu-latest
+          - system: aarch64-linux
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: nix-community/cache-nix-action@v6
+        with:
+          primary-key: nix-${{ matrix.system }}-${{ hashFiles('flake.lock') }}
+          restore-prefixes-first-match: nix-${{ matrix.system }}-
+      - run: nix build .#packages.${{ matrix.system }}.oras-files -L
+      - name: Push with ORAS
+        if: github.ref == 'refs/heads/master'
+        run: |
+          nix shell nixpkgs#oras -c oras login ghcr.io -u "${{ github.actor }}" -p "${{ secrets.GITHUB_TOKEN }}"
+          nix run .#apps.${{ matrix.system }}.push -- "ghcr.io/v-sekai-fire/wings:${GITHUB_SHA::12}"

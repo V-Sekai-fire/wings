@@ -1,0 +1,15 @@
+#!/bin/bash
+# cagefit <in.obj> <out.obj> [hair mm]: all-quad cage of a triangle/quad mesh whose Catmull-Clark limit stays within the hair's error.
+# Takes the smallest round of cagetest that is within the hair; if none is, the full-resolution cage (round 0). Welds duplicate points.
+set -e
+lin() { case "$1" in /*) echo "$1";; *) wslpath -u "$1";; esac; }
+IN=$(lin "$1"); OUT=$(lin "$2"); HAIR=${3:-0.1}
+T=$(mktemp -d); trap 'rm -rf $T' EXIT
+awk '
+/^v /{ k=sprintf("%.7g %.7g %.7g",$2,$3,$4); if(!(k in id)){id[k]=n++; V[n-1]=k} map[++m]=id[k] }
+/^f /{ nf=NF-1; for(i=2;i<=NF;i++){ split($i,a,"/"); p[i-1]=map[a[1]] } for(i=2;i<nf;i++){ t[nt++]=p[1]" "p[i]" "p[i+1] } }
+END{ print n; for(i=0;i<n;i++) print V[i]; print nt; for(i=0;i<nt;i++) print t[i] }' "$IN" > $T/s.txt
+/mnt/fire/3-interactor/subdiv-cage/cagetest $T/s.txt $T/c 12 $HAIR > $T/log.txt
+R=$(sed -n 's/^smallest cage within .*: round \([0-9]*\)$/\1/p' $T/log.txt); R=${R:-0}
+cp $T/c_cage_r$R.obj "$OUT"; cp $T/log.txt "${OUT%.obj}.log"
+echo "round $R: $(grep -c '^f ' "$OUT") quads"
