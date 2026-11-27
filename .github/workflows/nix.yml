@@ -52,12 +52,14 @@ jobs:
         with:
           primary-key: nix-macos-${{ matrix.arch }}-${{ hashFiles('flake.lock') }}
           restore-prefixes-first-match: nix-macos-${{ matrix.arch }}-
-      # The SDK is private and not redistributable: a token that can read V-Sekai-fire/repository-apple-sdks.
+      # The SDK is private and not redistributable. It is the private package ghcr.io/v-sekai-fire/apple-sdks; the
+      # package's settings must give this repository Actions read access.
       - name: Fetch the SDK
         id: sdk
         env:
-          APPLE_SDK_TOKEN: ${{ secrets.APPLE_SDK_TOKEN }}
-        run: echo "override=$(tools/fetch-apple-sdk.sh "$RUNNER_TEMP/sdk" | tail -1)" >> "$GITHUB_OUTPUT"
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: nix shell nixpkgs#oras -c bash -c 'echo "override=$(tools/fetch-apple-sdk.sh "$RUNNER_TEMP/sdk" | tail -1)" >> "$GITHUB_OUTPUT"' 
       - run: nix build .#packages.x86_64-linux.macos-${{ matrix.arch }}-nifs ${{ steps.sdk.outputs.override }} -L -o result
       - name: Push with ORAS
         if: github.ref == 'refs/heads/master'
