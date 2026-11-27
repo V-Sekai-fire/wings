@@ -1,5 +1,17 @@
 {
   "nodes": {
+    "appleSdk": {
+      "flake": false,
+      "locked": {
+        "path": "./nix/apple-sdk-placeholder",
+        "type": "path"
+      },
+      "original": {
+        "path": "./nix/apple-sdk-placeholder",
+        "type": "path"
+      },
+      "parent": []
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1795234589,
@@ -18,6 +30,7 @@
     },
     "root": {
       "inputs": {
+        "appleSdk": "appleSdk",
         "nixpkgs": "nixpkgs"
       }
     }

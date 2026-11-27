@@ -1,0 +1,3 @@
+Placeholder for the Apple SDK flake input `appleSdk`.
+The SDK is not redistributable: pass a local copy with
+  --override-input appleSdk path:/path/to/MacOSX26.5.sdk
